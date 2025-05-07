@@ -17,17 +17,21 @@ app.post('/api/instagram-followers', async (req, res) => {
     }
 
     try {
-        const response = await fetch(`https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync?token=${APIFY_API_TOKEN}`, {
+        const apifyUrl = `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync?token=${APIFY_API_TOKEN}`;
+        const apifyResponse = await fetch(apifyUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ usernames: [username] })
         });
 
-        const result = await response.json();
+        const result = await apifyResponse.json();
+
+        console.log('Apify result:', result); // ⬅️ 你可以在 Render 上看到這個 log
+
         res.json(result);
-    } catch (error) {
-        console.error('Proxy error:', error);
-        res.status(500).json({ error: 'Apify proxy failed' });
+    } catch (err) {
+        console.error('Proxy error:', err);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
