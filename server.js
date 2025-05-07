@@ -85,19 +85,19 @@ async function fetchInstagramData(username) {
     
     // 初始化ApifyClient
     const APIFY_API_KEY = process.env.APIFY_API_KEY || 'apify_api_yBCcJlwPijXWnHkbDcGP5cOUN7y4GE1xjRcL';
-    const ACTOR_ID = 'apify/instagram-followers-count-scraper'; // 使用Actor ID而不是Task ID
+    const ACTOR_ID = 'apify/instagram-followers-count-scraper'; // 使用標準Actor ID
     
     console.log('初始化Apify客戶端');
     const client = new ApifyClient({
       token: APIFY_API_KEY,
     });
     
-    // 準備輸入參數
+    // 準備輸入參數 - 注意這裡使用usernames（複數）
     const input = {
-      username: [username]
+      usernames: [username]  // 使用正確的參數名稱"usernames"
     };
     
-    console.log('調用Apify Actor...');
+    console.log('調用Apify Actor，輸入參數:', input);
     
     // 執行Actor並等待完成
     const run = await client.actor(ACTOR_ID).call(input);
