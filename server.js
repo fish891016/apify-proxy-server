@@ -23,15 +23,11 @@ app.post('/api/instagram-followers', async (req, res) => {
             body: JSON.stringify({ usernames: [username] })
         });
 
-        if (!response.ok) {
-            return res.status(response.status).json({ error: 'Failed to fetch from Apify' });
-        }
-
         const result = await response.json();
         res.json(result);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Internal server error' });
+    } catch (error) {
+        console.error('Proxy error:', error);
+        res.status(500).json({ error: 'Apify proxy failed' });
     }
 });
 
