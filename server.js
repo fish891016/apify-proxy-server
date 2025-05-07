@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
+const { ApifyClient } = require('apify-client');
 require('dotenv').config();
 
 const app = express();
@@ -32,7 +32,7 @@ app.get('/instagram-followers', async (req, res) => {
   }
 });
 
-// POST方法 - Instagram粉絲計數（與GET功能相同，提供兼容性）
+// POST方法 - Instagram粉絲計數
 app.post('/api/instagram-followers', async (req, res) => {
   const { username } = req.body;
   
@@ -49,47 +49,43 @@ app.post('/api/instagram-followers', async (req, res) => {
   }
 });
 
-// 從Apify獲取Instagram數據的函數
+// 使用ApifyClient獲取Instagram數據的函數
 async function fetchInstagramData(username) {
   try {
     console.log('正在獲取用戶數據:', username);
     
-    // Apify API設置
+    // 初始化ApifyClient
     const APIFY_API_KEY = process.env.APIFY_API_KEY || 'apify_api_yBCcJlwPijXWnHkbDcGP5cOUN7y4GE1xjRcL';
-    const ACTOR_ID = 'apify/instagram-followers-count-scraper';
+    const TASK_ID = '7RQ4RlfRihUhflQtJ'; // 使用您提供的Task ID
     
-    // 使用Apify API
-    const response = await axios.post(
-      `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync?token=${APIFY_API_KEY}`,
-      {
-        username: [username]
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
-    );
+    const client = new ApifyClient({
+      token: APIFY_API_KEY,
+    });
     
-    console.log('Apify API響應狀態:', response.status);
+    // 準備輸入參數
+    const input = {
+      usernames: [username]
+    };
     
-    // 檢查響應數據
-    if (response.data && response.data.items && response.data.items.length > 0) {
-      // 返回第一個結果
-      return response.data.items[0];
+    console.log('調用Apify Task...');
+    
+    // 執行Task並等待完成
+    const run = await client.task(TASK_ID).call(input);
+    
+    console.log('Task執行完成，獲取數據...');
+    
+    // 獲取結果
+    const { items } = await client.dataset(run.defaultDatasetId).listItems();
+    
+    console.log('成功獲取數據項數:', items.length);
+    
+    if (items.length > 0) {
+      return items[0]; // 返回第一個結果
     } else {
-      console.error('未找到數據:', response.data);
       throw new Error('未找到用戶數據');
     }
   } catch (error) {
-    console.error('Apify API錯誤:', error.message);
-    
-    // 提供更詳細的錯誤信息
-    if (error.response) {
-      console.error('API錯誤響應:', error.response.data);
-      console.error('API錯誤狀態:', error.response.status);
-    }
-    
+    console.error('Apify Client錯誤:', error.message);
     throw error;
   }
 }
