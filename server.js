@@ -17,23 +17,30 @@ app.post('/api/instagram-followers', async (req, res) => {
     }
 
     try {
-        const apifyUrl = `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync?token=${APIFY_API_TOKEN}`;
-        const apifyResponse = await fetch(apifyUrl, {
+        const response = await fetch(`https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ usernames: [username] })
         });
 
-        const result = await apifyResponse.json();
+        if (!response.ok) {
+            throw new Error(`Apify error: ${response.statusText}`);
+        }
 
-        console.log('Apify result:', result); // ⬅️ 你可以在 Render 上看到這個 log
+        const items = await response.json();
 
-        res.json(result);
+        if (!items || items.length === 0) {
+            return res.status(404).json({ error: '未找到用戶數據' });
+        }
+
+        res.json(items[0]); // 回傳單一用戶資料
+
     } catch (err) {
         console.error('Proxy error:', err);
-        res.status(500).json({ error: 'Server error' });
+        res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
     }
 });
 
 const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Apify Proxy Server is running.'));
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
