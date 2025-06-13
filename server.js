@@ -51,8 +51,7 @@ app.get('/instagram-followers', async (req, res) => {
 });
 
 async function fetchFromApify(username) {
-  const url = `https://api.apify.com/v2/actor-tasks/fish891016~instagram-followers-count-scraper-task/run-sync-get-dataset-items?token=${process.env.APIFY_API_KEY}`;
-
+  const url = `https://api.apify.com/v2/acts/fish891016~instagram-followers-count-scraper/run-sync-get-dataset-items?token=${process.env.APIFY_API_KEY}`;
   const payload = {
     userId: username,
     resultsLimit: 1,
@@ -77,7 +76,6 @@ async function fetchFromApify(username) {
 
   const item = data[0];
 
-  // 修正欄位名稱對應，確保輸出正確
   return {
     userName: item.userName || item.username || username,
     userFullName: item.userFullName || item.fullName || '',
