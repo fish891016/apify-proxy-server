@@ -1,34 +1,22 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // 只允許 https://ksdshop.com 的 CORS 請求
-const corsOptions = {
+app.use(cors({
   origin: 'https://ksdshop.com'
-};
-app.use(cors(corsOptions));
-
-// 防止濫用：每個 IP 每60分鐘最多 10 次請求
-const limiter = rateLimit({
-  windowMs: 3600 * 1000, // 60 分鐘
-  max: 10,
-  message: { error: '請求過於頻繁，請稍後再試' }
-});
-app.use(limiter);
+}));
 
 app.use(express.json());
 
-// 主頁路由
 app.get('/', (req, res) => {
   res.send('Instagram粉絲計數API代理服務器已啟動');
 });
 
-// GET方法 - Instagram粉絲計數
 app.get('/instagram-followers', async (req, res) => {
   const { username } = req.query;
   if (!username) {
@@ -43,7 +31,6 @@ app.get('/instagram-followers', async (req, res) => {
   }
 });
 
-// POST方法 - Instagram粉絲計數
 app.post('/api/instagram-followers', async (req, res) => {
   const { username } = req.body;
   if (!username) {
@@ -58,7 +45,6 @@ app.post('/api/instagram-followers', async (req, res) => {
   }
 });
 
-// 從 Apify 獲取 Instagram 數據的函數
 async function fetchInstagramData(username) {
   try {
     console.log('正在獲取用戶數據:', username);
@@ -86,7 +72,6 @@ async function fetchInstagramData(username) {
   }
 }
 
-// 啟動服務器
 app.listen(port, () => {
   console.log(`服務器運行在端口 ${port}`);
 });
