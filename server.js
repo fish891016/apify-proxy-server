@@ -1,4 +1,4 @@
-// server.js
+// server.js (with CORS whitelist support)
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -7,15 +7,30 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 啟用跨來源請求
-app.use(cors());
+// 建立白名單來源陣列（逗號分隔）
+const whitelist = process.env.CLIENT_WHITELIST
+  ? process.env.CLIENT_WHITELIST.split(',').map(origin => origin.trim())
+  : [];
+
+// 設定 CORS，僅允許白名單中的來源
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || whitelist.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('Blocked origin:', origin);
+      callback(new Error('不允許的來源'));
+    }
+  }
+}));
+
 app.use(express.json());
 
 app.get('/', (req, res) => {
   res.send('Instagram Follower Count Proxy Server is running.');
 });
 
-// 主要 API：透過 Apify 查詢 Instagram 粉絲數
+// Instagram follower proxy API
 app.get('/instagram-followers', async (req, res) => {
   const { username } = req.query;
 
@@ -43,7 +58,7 @@ app.get('/instagram-followers', async (req, res) => {
       return res.status(404).json({ error: `無法找到用戶 ${username} 的資料` });
     }
 
-    res.json(items[0]); // 傳回第一筆結果
+    res.json(items[0]);
   } catch (error) {
     console.error('Apify API 錯誤:', error.response?.data || error.message);
     res.status(500).json({
