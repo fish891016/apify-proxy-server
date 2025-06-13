@@ -54,12 +54,10 @@ async function fetchFromApify(username) {
   const url = `https://api.apify.com/v2/actor-tasks/fish891016~instagram-followers-count-scraper-task/run-sync-get-dataset-items?token=${process.env.APIFY_API_KEY}`;
 
   const payload = {
-    input: {
-      userId: username,
-      resultsLimit: 1,
-      includeFollowers: false,
-      includeFollowing: false
-    }
+    userId: username,
+    resultsLimit: 1,
+    includeFollowers: false,
+    includeFollowing: false
   };
 
   const response = await fetch(url, {
