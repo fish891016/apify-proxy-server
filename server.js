@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// 限流設定：每 IP 每小時最多 5次
+// IP 限流：60 分鐘內最多 5次
 const limiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -16,12 +16,12 @@ const limiter = rateLimit({
 app.use(limiter);
 app.use(cors());
 
-// 健康檢查用
+// 測試用路由
 app.get('/', (req, res) => {
   res.send('✅ IG Proxy Server Online');
 });
 
-// 主 API 路由
+// API 路由
 app.get('/instagram-followers', async (req, res) => {
   try {
     const { username } = req.query;
@@ -36,10 +36,7 @@ app.get('/instagram-followers', async (req, res) => {
       return res.status(401).json({ error: '未授權的請求' });
     }
 
-    const whitelist = (process.env.CLIENT_WHITELIST || '')
-      .split(',')
-      .map(s => s.trim());
-
+    const whitelist = (process.env.CLIENT_WHITELIST || '').split(',').map(s => s.trim());
     const isAllowedOrigin = whitelist.some(domain => origin.includes(domain));
     if (!isAllowedOrigin) {
       return res.status(403).json({ error: '來源不在白名單內' });
@@ -54,12 +51,12 @@ app.get('/instagram-followers', async (req, res) => {
 });
 
 async function fetchFromApify(username) {
-  const url = `https://api.apify.com/v2/actor-tasks/fish891016~instagram-followers-count-scraper-task/run-sync?token=${process.env.APIFY_API_KEY}`;
-
+  const url = `https://api.apify.com/v2/actor-tasks/fish891016~instagram-followers-count-scraper-task/run-sync-get-dataset-items?token=${process.env.APIFY_API_KEY}`;
   const payload = {
-    input: {
-      instagramUsernames: [username]
-    }
+    userId: username,
+    resultsLimit: 1,
+    includeFollowers: false,
+    includeFollowing: false
   };
 
   const response = await fetch(url, {
@@ -73,9 +70,11 @@ async function fetchFromApify(username) {
   }
 
   const data = await response.json();
-  const item = data.data?.[0];
-  if (!item) throw new Error('Apify 回傳資料異常或查無資料');
+  if (!Array.isArray(data) || !data[0]) {
+    throw new Error('Apify 回傳資料格式異常或查無資料');
+  }
 
+  const item = data[0];
   return {
     userName: item.username || username,
     userFullName: item.fullName || '',
