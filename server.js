@@ -1,202 +1,105 @@
-{% if content %}
-  <div class="container">
-    <div class="row">
-      <div class="col-md-8 col-md-offset-2">
-        <div class="well {% if site['rtl'] %} rtl-content {% endif %} bg-white-contianer">
-          {{ content }}
-        </div>
-      </div>
-    </div>
-  </div>
-{% endif %}
+const express = require('express');
+const cors = require('cors');
+const fetch = require('node-fetch');
+const app = express();
+const port = process.env.PORT || 3000;
 
-<script>
-const cooldownManager = {
-    COOLDOWN_TIME: 60,
-    cooldownKey: 'ksdIgFollowerCooldown',
-    ipLimitKey: 'ksdIgIpRateLimit',
-
-    getRemainingCooldown: function() {
-        const lastSearchTime = localStorage.getItem(this.cooldownKey);
-        if (!lastSearchTime) return 0;
-        const elapsed = Math.floor((Date.now() - parseInt(lastSearchTime)) / 1000);
-        return Math.max(this.COOLDOWN_TIME - elapsed, 0);
-    },
-    setSearchTime: function() {
-        localStorage.setItem(this.cooldownKey, Date.now().toString());
-    },
-    checkIpRateLimit: function() {
-        const recordStr = localStorage.getItem(this.ipLimitKey);
-        const now = Date.now();
-        const windowMs = 60 * 60 * 1000; // 60 分鐘
-        let record = recordStr ? JSON.parse(recordStr) : [];
-        record = record.filter(ts => now - ts < windowMs);
-        if (record.length >= 5) return false;
-        record.push(now);
-        localStorage.setItem(this.ipLimitKey, JSON.stringify(record));
-        return true;
-    }
-};
-
-const historyStorage = {
-    getHistory: () => JSON.parse(localStorage.getItem('ksdIgFollowerHistory') || '[]'),
-    addToHistory: function(data) {
-        const history = this.getHistory();
-        const item = {
-            userName: data.userName,
-            userFullName: data.userFullName || '',
-            userId: data.userId || '',
-            profilePic: data.profilePic || '',
-            userUrl: data.userUrl || '',
-            followersCount: data.followersCount || 0,
-            followsCount: data.followsCount || 0,
-            originalTimestamp: data.originalTimestamp || data.timestamp || '',
-            formattedTimestamp: data.formattedTimestamp || ''
-        };
-        const index = history.findIndex(i => i.userName === data.userName);
-        if (index !== -1) history[index] = item;
-        else {
-            history.unshift(item);
-            while (history.length > 6) history.pop();
-        }
-        localStorage.setItem('ksdIgFollowerHistory', JSON.stringify(history));
-        this.render();
-    },
-    saveCurrentDisplayData: data => localStorage.setItem('ksdIgFollowerLastDisplay', JSON.stringify(data)),
-    getCurrentDisplayData: () => JSON.parse(localStorage.getItem('ksdIgFollowerLastDisplay') || 'null'),
-    render: function() {
-        const history = this.getHistory();
-        const container = document.getElementById('historyList');
-        container.innerHTML = '';
-        if (!history.length) return document.getElementById('history').style.display = 'none';
-        document.getElementById('history').style.display = 'block';
-        history.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'ksd-history-item';
-            div.innerHTML = `<span class="ksd-history-user">@${item.userName}</span>
-                             <span class="ksd-history-count">${item.followersCount.toLocaleString()} 粉絲</span>`;
-            div.onclick = () => displayResults({ ...item, isNewSearch: false });
-            container.appendChild(div);
-        });
-    }
-};
-
-function formatTimestamp(timestamp) {
-    if (!timestamp) return '';
-    const clean = timestamp.replace(' - ', ' ');
-    const parsed = new Date(clean);
-    if (isNaN(parsed)) return '';
-    return new Intl.DateTimeFormat('zh-TW', {
-        year: 'numeric', month: 'numeric', day: 'numeric',
-        hour: 'numeric', minute: '2-digit', hour12: false
-    }).format(parsed);
+// 🧠 IP 限制記錄區
+const ipRateLimitMap = new Map();
+function isIpRateLimited(ip) {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000;
+  const limit = 5;
+  const history = ipRateLimitMap.get(ip) || [];
+  const recent = history.filter(ts => now - ts < windowMs);
+  if (recent.length >= limit) return true;
+  recent.push(now);
+  ipRateLimitMap.set(ip, recent);
+  return false;
 }
 
-function convertInstagramImageUrl(url) {
-    if (!url) return null;
-    if (url.includes('apifyusercontent.com')) return url;
-    return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-}
+// ✅ 基本中介軟體
+app.use(cors());
+app.use(express.json());
 
-async function getInstagramData(username) {
-    document.getElementById('loading').style.display = 'block';
-    const apiUrl = `https://apify-proxy-server.onrender.com/instagram-followers?username=${encodeURIComponent(username)}`;
-    try {
-        const response = await fetch(apiUrl, {
-            headers: { 'X-KSD-Auth': 'ksd_secret_2025' }
-        });
-        if (!response.ok) throw new Error(`API請求失敗 (${response.status})`);
-        const data = await response.json();
-        if (!data) throw new Error('查無用戶資料');
-        const now = new Date();
-        return {
-            ...data,
-            isNewSearch: true,
-            originalTimestamp: data.timestamp || now.toISOString(),
-            formattedTimestamp: formatTimestamp(data.timestamp || now.toISOString())
-        };
-    } catch (e) {
-        throw e;
-    } finally {
-        document.getElementById('loading').style.display = 'none';
-    }
-}
+// 📡 主 API 路由
+app.get('/instagram-followers', async (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-function displayResults(data) {
-    document.getElementById('displayName').textContent = '@' + data.userName;
-    const profilePic = document.getElementById('profilePic');
-    profilePic.onerror = () => profilePic.src = `https://via.placeholder.com/100/FF9800/FFFFFF/?text=${data.userName.charAt(0).toUpperCase()}`;
-    profilePic.src = convertInstagramImageUrl(data.profilePic) || profilePic.onerror();
-    document.getElementById('fullName').textContent = data.userFullName;
-    document.getElementById('userId').textContent = '用戶ID: ' + data.userId;
-    document.getElementById('profileLink').href = data.userUrl || '#';
-    document.getElementById('profileLink').style.display = data.userUrl ? 'inline-flex' : 'none';
-    document.getElementById('followersCount').textContent = data.followersCount.toLocaleString();
-    document.getElementById('followingCount').textContent = data.followsCount.toLocaleString();
-    document.getElementById('lastUpdated').textContent = data.formattedTimestamp;
-    document.getElementById('result').style.display = 'block';
-    historyStorage.addToHistory(data);
-    historyStorage.saveCurrentDisplayData(data);
-}
+  // 限制同 IP 請求次數
+  if (isIpRateLimited(ip)) {
+    return res.status(429).json({ error: '請求過於頻繁，請稍後再試。' });
+  }
 
-function disableSearchButton() {
-    const btn = document.getElementById('checkBtn');
-    btn.disabled = true;
-    btn.classList.add('disabled');
-}
-function enableSearchButton() {
-    const btn = document.getElementById('checkBtn');
-    btn.disabled = false;
-    btn.classList.remove('disabled');
-}
+  // Header 金鑰檢查
+  const authHeader = req.headers['x-ksd-auth'];
+  if (!authHeader || authHeader !== 'ksd_secret_2025') {
+    return res.status(403).json({ error: '未授權的請求' });
+  }
 
-function restoreLastDisplayIfAny() {
-    const last = historyStorage.getCurrentDisplayData();
-    if (!last) return;
-    last.isNewSearch = false;
-    if (!last.formattedTimestamp && last.originalTimestamp)
-        last.formattedTimestamp = formatTimestamp(last.originalTimestamp);
-    displayResults(last);
-}
+  const username = req.query.username;
+  if (!username) {
+    return res.status(400).json({ error: '缺少 username 參數' });
+  }
 
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('checkBtn').addEventListener('click', async function() {
-        const username = document.getElementById('username').value.trim();
-        if (!username) return showError('請輸入有效的用戶名');
-        const wait = cooldownManager.getRemainingCooldown();
-        if (wait > 0) return showError(`請等待 ${wait} 秒後再次搜尋`);
-        const allowed = cooldownManager.checkIpRateLimit();
-        if (!allowed) return showError('查詢過於頻繁，請稍後再試');
+  try {
+    const apiKey = process.env.APIFY_API_TOKEN || 'apify_api_TUggrdG6k3oiw9kTSTKArd5dfmraPP1XVL3x';
+    const actorTaskId = 'apify/instagram-followers-count-scraper';
 
-        disableSearchButton();
-        hideError();
-        document.getElementById('result').style.display = 'none';
-        try {
-            const data = await getInstagramData(username);
-            displayResults(data);
-            cooldownManager.setSearchTime();
-        } catch (e) {
-            showError(`查詢錯誤：${e.message}`);
-        } finally {
-            enableSearchButton();
-        }
+    // 啟動任務並等待完成
+    const runResponse = await fetch(`https://api.apify.com/v2/acts/${actorTaskId}/runs`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        input: { usernames: [username] },
+        waitForFinish: true
+      })
     });
 
-    document.getElementById('username').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') document.getElementById('checkBtn').click();
-    });
+    const runData = await runResponse.json();
+    const { defaultDatasetId } = runData.data || {};
 
-    historyStorage.render();
-    restoreLastDisplayIfAny();
-    enableSearchButton();
+    if (!defaultDatasetId) {
+      return res.status(500).json({ error: '任務執行失敗或未產生資料集' });
+    }
+
+    // 取得資料集
+    const datasetRes = await fetch(`https://api.apify.com/v2/datasets/${defaultDatasetId}/items?format=json`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    });
+    const dataset = await datasetRes.json();
+
+    if (!dataset || !dataset.length) {
+      return res.status(404).json({ error: '查無用戶資料' });
+    }
+
+    const user = dataset[0];
+    res.json({
+      userName: user.username,
+      userFullName: user.fullName,
+      userId: user.userId,
+      profilePic: user.profilePicUrl,
+      userUrl: user.profileUrl,
+      followersCount: user.followers,
+      followsCount: user.following,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('API 錯誤:', err.message);
+    res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
+  }
 });
 
-function showError(msg) {
-    const el = document.getElementById('error');
-    el.textContent = msg;
-    el.style.display = 'block';
-}
-function hideError() {
-    document.getElementById('error').style.display = 'none';
-}
-</script>
+// 🏠 主頁測試路由
+app.get('/', (req, res) => {
+  res.send('✅ Instagram Followers Proxy Server 運作中');
+});
+
+app.listen(port, () => {
+  console.log(`✅ Server is running at http://localhost:${port}`);
+});
