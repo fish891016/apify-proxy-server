@@ -59,7 +59,7 @@ async function fetchFromApify(username) {
 
   // 直接在根層覆蓋任務輸入，不要用 { input: { … } }
   const payload = {
-    userId: username,      // 要查詢的 Instagram 使用者名稱
+    usernames: [username],      // 要查詢的 Instagram 使用者名稱
     resultsLimit: 1,       // 只要一筆結果
     includeFollowers: true,
     includeFollowing: true
