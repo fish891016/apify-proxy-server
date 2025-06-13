@@ -1,46 +1,92 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const cors = require('cors');
+const axios = require('axios');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
 const app = express();
-app.use(cors());
+const port = process.env.PORT || 3000;
+
+// 只允許 https://ksdshop.com 的 CORS 請求
+const corsOptions = {
+  origin: 'https://ksdshop.com'
+};
+app.use(cors(corsOptions));
+
+// 防止濫用：每個 IP 每60分鐘最多 10 次請求
+const limiter = rateLimit({
+  windowMs: 3600 * 1000, // 60 分鐘
+  max: 10,
+  message: { error: '請求過於頻繁，請稍後再試' }
+});
+app.use(limiter);
+
 app.use(express.json());
 
-const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN;
-const APIFY_ACTOR_ID = 'apify/instagram-followers-count-scraper';
-
-app.post('/api/instagram-followers', async (req, res) => {
-    const { username } = req.body;
-
-    if (!username) {
-        return res.status(400).json({ error: 'Missing username' });
-    }
-
-    try {
-        const response = await fetch(`https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync-get-dataset-items?token=${APIFY_API_TOKEN}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usernames: [username] })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Apify error: ${response.statusText}`);
-        }
-
-        const items = await response.json();
-
-        if (!items || items.length === 0) {
-            return res.status(404).json({ error: '未找到用戶數據' });
-        }
-
-        res.json(items[0]); // 回傳單一用戶資料
-
-    } catch (err) {
-        console.error('Proxy error:', err);
-        res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
-    }
+// 主頁路由
+app.get('/', (req, res) => {
+  res.send('Instagram粉絲計數API代理服務器已啟動');
 });
 
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Apify Proxy Server is running.'));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// GET方法 - Instagram粉絲計數
+app.get('/instagram-followers', async (req, res) => {
+  const { username } = req.query;
+  if (!username) {
+    return res.status(400).json({ error: '請提供用戶名參數' });
+  }
+  try {
+    const data = await fetchInstagramData(username);
+    res.json(data);
+  } catch (error) {
+    console.error('API錯誤:', error.message);
+    res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
+  }
+});
+
+// POST方法 - Instagram粉絲計數
+app.post('/api/instagram-followers', async (req, res) => {
+  const { username } = req.body;
+  if (!username) {
+    return res.status(400).json({ error: '請提供用戶名參數' });
+  }
+  try {
+    const data = await fetchInstagramData(username);
+    res.json(data);
+  } catch (error) {
+    console.error('API錯誤:', error.message);
+    res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
+  }
+});
+
+// 從 Apify 獲取 Instagram 數據的函數
+async function fetchInstagramData(username) {
+  try {
+    console.log('正在獲取用戶數據:', username);
+    const APIFY_API_KEY = process.env.APIFY_API_KEY || 'apify_api_yBCcJlwPijXWnHkbDcGP5cOUN7y4GE1xjRcL';
+    const ACTOR_ID = 'apify/instagram-followers-count-scraper';
+    const response = await axios.post(
+      `https://api.apify.com/v2/acts/${ACTOR_ID}/run-sync?token=${APIFY_API_KEY}`,
+      { username: [username] },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    console.log('Apify API響應狀態:', response.status);
+    if (response.data && response.data.items && response.data.items.length > 0) {
+      return response.data.items[0];
+    } else {
+      console.error('未找到數據:', response.data);
+      throw new Error('未找到用戶數據');
+    }
+  } catch (error) {
+    console.error('Apify API錯誤:', error.message);
+    if (error.response) {
+      console.error('API錯誤響應:', error.response.data);
+      console.error('API錯誤狀態:', error.response.status);
+    }
+    throw error;
+  }
+}
+
+// 啟動服務器
+app.listen(port, () => {
+  console.log(`服務器運行在端口 ${port}`);
+});
