@@ -7,12 +7,25 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// 信任代理（重要！）
+app.set('trust proxy', true);
+
 // IP 限流：每小時最多 5 次
-app.use(rateLimit({
+const limiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
-  message: { error: '請求過於頻繁，請稍後再試。' }
-}));
+  message: { error: '請求過於頻繁，請稍後再試。' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // 確保使用正確的 IP
+  keyGenerator: (req) => {
+    // 優先使用 X-Forwarded-For 標頭
+    return req.headers['x-forwarded-for']?.split(',')[0].trim() || 
+           req.headers['x-real-ip'] || 
+           req.connection.remoteAddress || 
+           req.ip;
+  }
+});
 
 app.use(cors());
 app.use(express.json());
@@ -22,8 +35,27 @@ app.get('/', (req, res) => {
   res.send('✅ IG Proxy Server Online');
 });
 
-// 主 API 路由
-app.get('/instagram-followers', async (req, res) => {
+// 除錯路由：查看 IP 資訊
+app.get('/debug-ip', (req, res) => {
+  res.json({
+    ip: req.ip,
+    ips: req.ips,
+    headers: {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'x-real-ip': req.headers['x-real-ip'],
+      'x-forwarded-proto': req.headers['x-forwarded-proto'],
+      'cf-connecting-ip': req.headers['cf-connecting-ip']  // Cloudflare
+    },
+    remoteAddress: req.connection.remoteAddress
+  });
+});
+
+// 主 API 路由（套用限流）
+app.get('/instagram-followers', limiter, async (req, res) => {
+  // 記錄請求資訊（除錯用）
+  console.log('請求來自 IP:', req.ip);
+  console.log('X-Forwarded-For:', req.headers['x-forwarded-for']);
+  
   try {
     const { username } = req.query;
     const authHeader = req.headers['x-ksd-auth'];
@@ -54,13 +86,11 @@ app.get('/instagram-followers', async (req, res) => {
 async function fetchFromApify(username) {
   const TASK_ID = 'fish891016~instagram-followers-count-scraper-task';
   const token = process.env.APIFY_API_KEY;
-  // 加上 &clean=1 只回傳乾淨的結果陣列
   const url = `https://api.apify.com/v2/actor-tasks/${TASK_ID}/run-sync-get-dataset-items?token=${token}&clean=1`;
 
-  // 直接在根層覆蓋任務輸入，不要用 { input: { … } }
   const payload = {
-    usernames: [username],      // 要查詢的 Instagram 使用者名稱
-    resultsLimit: 1,       // 只要一筆結果
+    usernames: [username],
+    resultsLimit: 1,
     includeFollowers: true,
     includeFollowing: true
   };
