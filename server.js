@@ -52,11 +52,12 @@ app.get('/instagram-followers', async (req, res) => {
 
 async function fetchFromApify(username) {
   const url = `https://api.apify.com/v2/actor-tasks/fish891016~instagram-followers-count-scraper-task/run-sync-get-dataset-items?token=${process.env.APIFY_API_KEY}`;
+
   const payload = {
-    userId: username,
+    usernames: [username], // ← ⚠️ 必須用 `usernames` 陣列
     resultsLimit: 1,
-    includeFollowers: false,
-    includeFollowing: false
+    includeFollowers: true,
+    includeFollowing: true
   };
 
   const response = await fetch(url, {
@@ -70,22 +71,25 @@ async function fetchFromApify(username) {
   }
 
   const data = await response.json();
+
   if (!Array.isArray(data) || !data[0]) {
     throw new Error('Apify 回傳資料格式異常或查無資料');
   }
 
   const item = data[0];
+
   return {
     userName: item.username || username,
     userFullName: item.fullName || '',
     userId: item.id || '',
     profilePic: item.profilePicUrl || '',
-    userUrl: `https://instagram.com/${item.username}`,
+    userUrl: item.username ? `https://instagram.com/${item.username}` : '',
     followersCount: item.followersCount || 0,
     followsCount: item.followsCount || 0,
     timestamp: new Date().toISOString()
   };
 }
+
 
 app.listen(PORT, () => {
   console.log(`✅ Server is running at http://localhost:${PORT}`);
