@@ -1,4 +1,4 @@
-// server.js (with CORS whitelist support)
+// server.js (with CORS whitelist and Header verification)
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -28,6 +28,15 @@ app.use(express.json());
 
 app.get('/', (req, res) => {
   res.send('Instagram Follower Count Proxy Server is running.');
+});
+
+// Header 驗證 middleware
+app.use('/instagram-followers', (req, res, next) => {
+  const token = req.headers['x-ksd-auth'];
+  if (token !== process.env.KSD_SECRET) {
+    return res.status(403).json({ error: '未授權的請求 (Header 驗證失敗)' });
+  }
+  next();
 });
 
 // Instagram follower proxy API
